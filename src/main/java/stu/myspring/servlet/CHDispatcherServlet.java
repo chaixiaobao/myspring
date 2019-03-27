@@ -1,10 +1,12 @@
 package stu.myspring.servlet;
 
+import java.beans.Introspector;
 import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -96,7 +98,7 @@ public class CHDispatcherServlet extends HttpServlet {
 
     private void initBeans() {
         // TODO Auto-generated method stub
-        for (Map.Entry<String, CHBeanDefinition> entry : beanMaps.entrySet()) {
+        for (Map.Entry<String, CHBeanDefinition> entry : this.beanMaps.entrySet()) {
             if (!entry.getValue().isLazyInit() && !this.context.containsKey(entry.getKey())) {
                 initBean(entry.getKey(), entry.getValue());
             }
@@ -124,7 +126,7 @@ public class CHDispatcherServlet extends HttpServlet {
         populateBean(clazz, instance);
         context.put(beanName, instance);
         for (Class<?> i : clazz.getInterfaces()) {
-            context.put(i.getName(), instance);
+            this.context.put(i.getName(), instance);
         }
     }
 
@@ -139,7 +141,7 @@ public class CHDispatcherServlet extends HttpServlet {
                         if (field.getType().isInterface()) {
                             beanName = field.getType().getName();
                         } else {
-                            beanName = lowerCase(field.getType().getSimpleName());
+                            beanName = Introspector.decapitalize(field.getType().getSimpleName());
                         }
                     }
                     if (!field.isAccessible()) {
@@ -177,9 +179,10 @@ public class CHDispatcherServlet extends HttpServlet {
                         beanDefinition.setBeanClass(clazz);
                         beanDefinition.setLazyInit(annotation.lazyInit());
                         if (annotation.value() == null || annotation.value().equals("")) {
-                            beanMaps.put(lowerCase(clazz.getSimpleName()), beanDefinition);
+                            this.beanMaps.put(Introspector.decapitalize(clazz.getSimpleName()),
+                                    beanDefinition);
                         } else {
-                            beanMaps.put(annotation.value(), beanDefinition);
+                            this.beanMaps.put(annotation.value(), beanDefinition);
                         }
                     } else if (clazz.isAnnotationPresent(CHService.class)) {
                         CHService annotation = clazz.getAnnotation(CHService.class);
@@ -188,12 +191,13 @@ public class CHDispatcherServlet extends HttpServlet {
                         beanDefinition.setBeanClass(clazz);
                         beanDefinition.setLazyInit(annotation.lazyInit());
                         if (annotation.value() == null || annotation.value().equals("")) {
-                            beanMaps.put(lowerCase(clazz.getSimpleName()), beanDefinition);
+                            this.beanMaps.put(Introspector.decapitalize(clazz.getSimpleName()),
+                                    beanDefinition);
                         } else {
-                            beanMaps.put(annotation.value(), beanDefinition);
+                            this.beanMaps.put(annotation.value(), beanDefinition);
                         }
                         for (Class<?> i : clazz.getInterfaces()) {
-                            beanMaps.put(i.getName(), beanDefinition);
+                            this.beanMaps.put(i.getName(), beanDefinition);
                         }
                     } else {
 
@@ -204,13 +208,6 @@ public class CHDispatcherServlet extends HttpServlet {
                 }
             }
         }
-    }
-
-    private String lowerCase(String simpleName) {
-        // TODO Auto-generated method stub
-        char[] chars = simpleName.toCharArray();
-        chars[0] += 32;
-        return String.valueOf(chars);
     }
 
     /**
@@ -251,7 +248,6 @@ public class CHDispatcherServlet extends HttpServlet {
     private void doDispatch(HttpServletRequest request, HttpServletResponse response) {
         // TODO Auto-generated method stub
         try {
-
             Handler handler = getHandler(request);
             if (handler == null) {
                 response.getWriter().write("404 not found!!!");
@@ -261,7 +257,11 @@ public class CHDispatcherServlet extends HttpServlet {
             handler.getMethod().invoke(handler.getController(), params);
         } catch (Exception e) {
             // TODO: handle exception
-            e.printStackTrace();
+            try {
+                response.getWriter().write(e.toString());
+            } catch (IOException e1) {
+                e1.printStackTrace();
+            }
         }
     }
 
@@ -278,17 +278,11 @@ public class CHDispatcherServlet extends HttpServlet {
             } else if (paramsClass[i] == HttpServletResponse.class) {
                 params[i] = response;
             } else {
-                // String xx = annotations[i][0].annotationType().getSimpleName();
                 for (int j = 0; j < annotations[i].length; j++) {
                     if (annotations[i][j].annotationType() == CHRequestParam.class) {
                         CHRequestParam annotation = (CHRequestParam) annotations[i][j];
                         String paramName = annotation.value();
-                        for (Map.Entry<String, String[]> entry : paramsMap.entrySet()) {
-                            if (paramName.equals(entry.getKey())) {
-                                params[i] = entry.getValue()[0];
-                                break;
-                            }
-                        }
+                        params[i] = Arrays.toString(paramsMap.get(paramName)).replaceAll("\\[|\\]", "");
                         break;
                     }
                 }
